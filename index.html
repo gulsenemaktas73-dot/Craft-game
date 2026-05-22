@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>⛏ MineCraft Clone</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+canvas { display: block; touch-action: none; }
+#crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); color: white; font-size: 28px; text-shadow: 1px 1px 3px black,-1px -1px 3px black; pointer-events: none; z-index: 11; }
+#health-bar { position: fixed; bottom: 95px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; z-index: 11; pointer-events: none; }
+.heart { font-size: 16px; }
+#hotbar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 3px; z-index: 11; }
+.hslot { width: 50px; height: 50px; border: 2px solid #666; background: rgba(0,0,0,0.65); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; border-radius: 4px; }
+.hslot.active { border-color: #fff; border-width: 3px; }
+.hslot-icon { font-size: 22px; line-height: 1; }
+.hslot-name { font-size: 6px; color: #ccc; margin-top: 1px; text-align: center; }
+#item-label { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 13px; text-shadow: 1px 1px 3px black; pointer-events: none; z-index: 11; background: rgba(0,0,0,0.4); padding: 2px 10px; border-radius: 4px; }
+
+/* Inventory */
+#inv-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 25; align-items: center; justify-content: center; }
+#inv-overlay.open { display: flex; }
+#inv-panel { background: #8b8b8b; border: 3px solid #3b3b3b; border-radius: 4px; padding: 14px; width: min(420px, 95vw); }
+#inv-panel h3 { text-align: center; font-size: 15px; letter-spacing: 3px; color: #1a1a1a; margin-bottom: 10px; }
+.inv-section-label { font-size: 10px; color: #222; margin-bottom: 4px; font-weight: bold; }
+.inv-grid { display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; margin-bottom: 10px; }
+.inv-slot { aspect-ratio: 1; border: 2px solid #555; background: rgba(0,0,0,0.25); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; border-radius: 2px; font-size: 18px; position: relative; transition: background 0.1s; }
+.inv-slot:hover, .inv-slot:active { background: rgba(255,255,255,0.35); }
+.inv-slot.sel { border-color: #fff; background: rgba(255,255,255,0.2); }
+.inv-tip { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); background: rgba(20,20,40,0.95); color: #e0e0ff; font-size: 10px; padding: 3px 7px; border-radius: 3px; white-space: nowrap; pointer-events: none; display: none; z-index: 40; border: 1px solid #556; }
+.inv-slot:hover .inv-tip { display: block; }
+#inv-hint { text-align: center; font-size: 10px; color: #333; margin-top: 4px; }
+
+/* D-pad */
+#dpad { position: fixed; bottom: 90px; left: 16px; display: grid; grid-template-columns: 52px 52px 52px; grid-template-rows: 52px 52px 52px; gap: 2px; z-index: 15; }
+.dpad-btn { background: rgba(255,255,255,0.18); border: 2px solid rgba(255,255,255,0.35); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; cursor: pointer; color: white; user-select: none; -webkit-user-select: none; touch-action: none; transition: background 0.08s; }
+.dpad-btn.pressed, .dpad-btn:active { background: rgba(255,255,255,0.45); }
+.dpad-empty { }
+
+/* Right buttons */
+#right-btns { position: fixed; bottom: 90px; right: 14px; display: flex; flex-direction: column; gap: 8px; z-index: 15; align-items: flex-end; }
+.rbtn { width: 58px; height: 58px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; cursor: pointer; color: white; user-select: none; -webkit-user-select: none; touch-action: none; border: 2px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.18); transition: background 0.08s; }
+.rbtn:active, .rbtn.pressed { background: rgba(255,255,255,0.5); }
+#btn-jump { background: rgba(60,200,60,0.3); border-color: rgba(60,200,60,0.6); }
+#btn-attack { background: rgba(200,60,60,0.3); border-color: rgba(200,60,60,0.6); }
+#btn-place { background: rgba(60,120,220,0.3); border-color: rgba(60,120,220,0.6); }
+#btn-inv { background: rgba(180,140,60,0.3); border-color: rgba(180,140,60,0.6); }
+
+/* Info */
+#info { position: fixed; top: 8px; left: 8px; color: white; font-size: 11px; z-index: 11; background: rgba(0,0,0,0.5); padding: 6px 10px; border-radius: 6px; line-height: 1.9; }
+
+/* Effects */
+#dmg-flash { position: fixed; inset: 0; background: rgba(255,0,0,0); pointer-events: none; z-index: 30; transition: background 0.1s; }
+#dmg-flash.on { background: rgba(255,0,0,0.3); }
+#notify { position: fixed; top: 38%; left: 50%; transform: translateX(-50%); color: #ffe; font-size: 17px; font-weight: bold; text-shadow: 2px 2px 5px #000; pointer-events: none; z-index: 16; opacity: 0; transition: opacity 0.3s; text-align: center; }
+#notify.show { opacity: 1; }
+
+/* Overlays */
+#overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; color: white; }
+#overlay h1 { font-size: 46px; letter-spacing: 4px; color: #7dc155; text-shadow: 3px 3px 0 #3a6b22; margin-bottom: 8px; }
+#overlay p { color: #aaa; text-align: center; margin-bottom: 28px; font-size: 13px; line-height: 1.8; padding: 0 24px; }
+.big-btn { padding: 13px 36px; font-size: 17px; background: #7dc155; border: none; border-radius: 6px; cursor: pointer; color: #1a3a0a; font-weight: bold; font-family: 'Courier New', monospace; }
+.big-btn:hover { background: #9be070; }
+#death-screen { display: none; position: fixed; inset: 0; background: rgba(140,0,0,0.65); z-index: 90; align-items: center; justify-content: center; flex-direction: column; color: white; }
+#death-screen h2 { font-size: 46px; color: #ff4444; text-shadow: 2px 2px 8px #000; margin-bottom: 20px; }
+#pause-menu { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72); z-index: 50; align-items: center; justify-content: center; flex-direction: column; color: white; }
+#pause-menu h2 { font-size: 30px; margin-bottom: 20px; color: #7dc155; }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="crosshair">+</div>
+<div id="dmg-flash"></div>
+<div id="notify"></div>
+<div id="health-bar"></div>
+<div id="hotbar"></div>
+<div id="item-label"></div>
+
+<!-- Inventory -->
+<div id="inv-overlay">
+  <div id="inv-panel">
+    <h3>⚔ ENVANTER</h3>
+    <div class="inv-section-label">Eşyalar (Seçmek için tıkla → Aktif hotbar slotuna atar)</div>
+    <div id="inv-items" class="inv-grid"></div>
+    <div class="inv-section-label">Hızlı Erişim</div>
+    <div id="inv-hotbar" class="inv-grid"></div>
+    <div id="inv-hint">[E] / [ESC] Kapat &nbsp;|&nbsp; Eşya tıkla → Hotbar'a ekle</div>
+  </div>
+</div>
+
+<!-- D-Pad -->
+<div id="dpad">
+  <div class="dpad-empty"></div>
+  <div class="dpad-btn" id="dp-up">▲</div>
+  <div class="dpad-empty"></div>
+  <div class="dpad-btn" id="dp-left">◀</div>
+  <div class="dpad-empty"></div>
+  <div class="dpad-btn" id="dp-right">▶</div>
+  <div class="dpad-empty"></div>
+  <div class="dpad-btn" id="dp-down">▼</div>
+  <div class="dpad-empty"></div>
+</div>
+
+<!-- Right buttons -->
+<div id="right-btns">
+  <div class="rbtn" id="btn-inv" title="Envanter">🎒</div>
+  <div class="rbtn" id="btn-place" title="Blok Koy">🧱</div>
+  <div class="rbtn" id="btn-attack" title="Kullan/Saldır">⚔</div>
+  <div class="rbtn" id="btn-jump" title="Zıpla">⬆</div>
+</div>
+
+<div id="info">
+  WASD/Yönler: Hareket | Space/⬆: Zıpla<br>
+  Sol Tık/⚔: Kullan | Sağ Tık/🧱: Koy<br>
+  E/🎒: Envanter | 1-9: Slot seç<br>
+  Scroll: Hotbar | ESC: Duraklat
+</div>
+
+<div id="overlay">
+  <h1>⛏ MINECRAFT</h1>
+  <p>
+    ⚔️ Kılıç → Zombilere saldır<br>
+    🏹 Yay → Ok fırlat<br>
+    🪓 Balta → Ahşabı hızlı kes<br>
+    ⛏️ Kazma → Taşı hızlı kır<br>
+    🪣 Kürek → Toprağı hızlı kaz<br>
+    🎒 E tuşu → Envanter
+  </p>
+  <button class="big-btn" id="startBtn">OYNA</button>
+</div>
+
+<div id="death-screen">
+  <h2>💀 ÖLDÜN!</h2>
+  <button class="big-btn" id="respawnBtn">Yeniden Doğ</button>
+</div>
+
+<div id="pause-menu">
+  <h2>⏸ DURAKLADI</h2>
+  <button class="big-btn" id="resumeBtn">Devam Et</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ── DATA ──────────────────────────────────────────────
+const BLOCKS = [
+  { name:'Çimen',  color:0x7dc155 },
+  { name:'Toprak', color:0x8B6914 },
+  { name:'Taş',    color:0x888888 },
+  { name:'Kum',    color:0xd4c06a },
+  { name:'Ahşap',  color:0x8B5E3C },
+  { name:'Yaprak', color:0x2d7a1f },
+  { name:'Tuğla',  color:0xb85c38 },
+];
+
+const ITEMS = [
+  { name:'Çimen',   type:'block', bi:0, icon:'🟩', desc:'Blok koy/kır' },
+  { name:'Toprak',  type:'block', bi:1, icon:'🟫', desc:'Blok koy/kır' },
+  { name:'Taş',     type:'block', bi:2, icon:'⬜', desc:'Blok koy/kır' },
+  { name:'Kum',     type:'block', bi:3, icon:'🟨', desc:'Blok koy/kır' },
+  { name:'Ahşap',   type:'block', bi:4, icon:'🪵', desc:'Blok koy/kır' },
+  { name:'Yaprak',  type:'block', bi:5, icon:'🍃', desc:'Blok koy/kır' },
+  { name:'Tuğla',   type:'block', bi:6, icon:'🧱', desc:'Blok koy/kır' },
+  { name:'Kılıç',   type:'sword',       icon:'⚔️',  desc:'Zombilere 5 hasar, 3 blok menzil' },
+  { name:'Yay',     type:'bow',         icon:'🏹',  desc:'Ok fırlat — canlılara 4 hasar' },
+  { name:'Balta',   type:'axe',   mult:4, icon:'🪓', desc:'Ahşap/Yaprak 4x hızlı kırar' },
+  { name:'Kazma',   type:'pick',  mult:4, icon:'⛏️', desc:'Taş/Tuğla 4x hızlı kırar' },
+  { name:'Kürek',   type:'shovel',mult:4, icon:'🪣', desc:'Toprak/Kum 4x hızlı kazar' },
+];
+
+const HOTBAR_DEFAULT = [7, 8, 9, 10, 11, 0, 1, 2, 3];
+
+// ── THREE.JS ──────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 28, 75);
+
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 200);
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+sun.position.set(20, 40, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.width = sun.shadow.mapSize.height = 1024;
+Object.assign(sun.shadow.camera, { near:0.5, far:200, left:-50, right:50, top:50, bottom:-50 });
+scene.add(sun, new THREE.AmbientLight(0xb0c8ff, 0.5));
+
+// ── WORLD ─────────────────────────────────────────────
+const world = new Map();
+const meshMap = new Map();
+const blockGeo = new THREE.BoxGeometry(1,1,1);
+
+const bkey = (x,y,z) => `${Math.round(x)},${Math.round(y)},${Math.round(z)}`;
+
+function addBlock(x, y, z, bi) {
+  const k = bkey(x,y,z);
+  if (world.has(k)) return;
+  world.set(k, bi);
+  const m = new THREE.Mesh(blockGeo, new THREE.MeshLambertMaterial({ color: BLOCKS[bi].color }));
+  m.position.set(Math.round(x), Math.round(y), Math.round(z));
+  m.castShadow = m.receiveShadow = true;
+  scene.add(m);
+  meshMap.set(k, m);
+}
+
+function removeBlock(x, y, z) {
+  const k = bkey(x,y,z);
+  if (!world.has(k)) return;
+  const bi = world.get(k);
+  world.delete(k);
+  const m = meshMap.get(k);
+  if (m) scene.remove(m);
+  meshMap.delete(k);
+  return bi;
+}
+
+function getH(x, z) {
+  return Math.floor(3 + Math.sin(x*0.4)*2 + Math.cos(z*0.3)*2 + Math.sin(x*0.15+z*0.2)*3);
+}
+
+for (let x=0; x<32; x++) for (let z=0; z<32; z++) {
+  const h = getH(x,z);
+  addBlock(x, h, z, 0);
+  for (let y=h-1; y>=h-3; y--) addBlock(x,y,z,1);
+  for (let y=h-4; y>=0; y--) addBlock(x,y,z,2);
+}
+
+function addTree(tx, tz) {
+  const b = getH(tx,tz)+1;
+  for (let y=b; y<b+4; y++) addBlock(tx,y,tz,4);
+  for (let dx=-2; dx<=2; dx++) for (let dz=-2; dz<=2; dz++) for (let dy=0; dy<=2; dy++) {
+    if (Math.abs(dx)===2 && Math.abs(dz)===2 && dy<1) continue;
+    addBlock(tx+dx, b+3+dy, tz+dz, 5);
+  }
+}
+[[4,4],[11,20],[22,7],[25,25],[8,27],[18,13],[3,17],[28,11],[14,6],[20,28]].forEach(([x,z])=>addTree(x,z));
+
+// ── MOBS ─────────────────────────────────────────────
+const mobs = [];
+const MOB_DEFS = [
+  { name:'Zombi',   color:0x2d8b2d, eyeColor:0xff2222, hp:10, spd:2.8, dmg:0.5 },
+  { name:'İskelet', color:0xd8d8c8, eyeColor:0x3333ff, hp:7,  spd:3.2, dmg:0.4 },
+];
+
+class Mob {
+  constructor(x, y, z, ti=0) {
+    this.def = MOB_DEFS[ti];
+    this.hp = this.def.hp; this.maxHp = this.def.hp;
+    this.vel = new THREE.Vector3();
+    this.dead = false;
+    this.dmgTimer = 0;
+    this.wanderT = Math.random()*3;
+    this.wdir = { x: Math.random()-0.5, z: Math.random()-0.5 };
+
+    const mat = new THREE.MeshLambertMaterial({ color: this.def.color });
+    const eMat = new THREE.MeshLambertMaterial({ color: this.def.eyeColor });
+    this.group = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6,1.0,0.3), mat);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.5), mat);
+    head.position.y = 0.75;
+    const eGeo = new THREE.BoxGeometry(0.12,0.1,0.08);
+    const eL = new THREE.Mesh(eGeo, eMat); eL.position.set(-0.13,0.8,0.26);
+    const eR = new THREE.Mesh(eGeo, eMat); eR.position.set(0.13,0.8,0.26);
+    this.group.add(body, head, eL, eR);
+    this.group.position.set(x, y, z);
+    scene.add(this.group);
+
+    // HP bar sprite
+    this.hpc = document.createElement('canvas'); this.hpc.width=64; this.hpc.height=8;
+    this.hpt = new THREE.CanvasTexture(this.hpc);
+    const sm = new THREE.SpriteMaterial({ map:this.hpt, depthTest:false });
+    this.spr = new THREE.Sprite(sm);
+    this.spr.scale.set(1.4,0.18,1); this.spr.position.y=1.6;
+    this.group.add(this.spr);
+    this.drawHP();
+  }
+  drawHP() {
+    const c=this.hpc.getContext('2d'); c.clearRect(0,0,64,8);
+    c.fillStyle='#333'; c.fillRect(0,0,64,8);
+    const p=this.hp/this.maxHp;
+    c.fillStyle=p>0.5?'#44ff44':p>0.25?'#ffff44':'#ff3333';
+    c.fillRect(1,1,Math.floor(62*p),6);
+    this.hpt.needsUpdate=true;
+  }
+  hit(dmg) {
+    this.hp-=dmg; this.drawHP();
+    if (this.hp<=0) this.die();
+  }
+  die() {
+    if (this.dead) return; this.dead=true;
+    scene.remove(this.group);
+    notify('☠ '+this.def.name+' öldürüldü! +XP');
+    const i=mobs.indexOf(this); if(i!==-1) mobs.splice(i,1);
+  }
+  update(dt) {
+    if (this.dead) return;
+    const cp=camera.position, gp=this.group.position;
+    const dx=cp.x-gp.x, dz=cp.z-gp.z;
+    const dist=Math.sqrt(dx*dx+dz*dz);
+    let mx=0, mz=0;
+    if (dist<16) {
+      mx=dx/dist; mz=dz/dist;
+      this.group.lookAt(new THREE.Vector3(cp.x,gp.y,cp.z));
+    } else {
+      this.wanderT-=dt;
+      if (this.wanderT<=0) { this.wanderT=2+Math.random()*3; this.wdir={x:Math.random()-0.5,z:Math.random()-0.5}; }
+      mx=this.wdir.x; mz=this.wdir.z;
+    }
+    this.vel.y-=20*dt;
+    const spd=this.def.spd;
+    const nx=gp.x+mx*spd*dt, nz=gp.z+mz*spd*dt;
+    if (!world.has(bkey(nx,gp.y-0.5,gp.z))&&!world.has(bkey(nx,gp.y+0.4,gp.z))) gp.x=nx;
+    if (!world.has(bkey(gp.x,gp.y-0.5,nz))&&!world.has(bkey(gp.x,gp.y+0.4,nz))) gp.z=nz;
+    const ny=gp.y+this.vel.y*dt;
+    if (!world.has(bkey(gp.x,ny-0.5,gp.z))) { gp.y=ny; }
+    else { if(this.vel.y<0) this.vel.y=0; gp.y=Math.round(gp.y-0.5)+1.0; }
+    if (gp.y<-10) { gp.y=getH(Math.round(gp.x),Math.round(gp.z))+1.5; this.vel.y=0; }
+    if (dist<1.3&&!pState.dead) { this.dmgTimer-=dt; if(this.dmgTimer<=0){ hitPlayer(this.def.dmg); this.dmgTimer=0.6; } }
+  }
+}
+
+function spawnMobs() {
+  const pts=[[3,28],[7,14],[21,5],[27,21],[14,27],[10,9],[24,15],[5,22],[18,3],[29,8]];
+  pts.forEach(([x,z],i)=>{ const h=getH(x,z)+1.5; mobs.push(new Mob(x,h,z,i%2)); });
+}
+
+// ── ARROWS ────────────────────────────────────────────
+const arrows=[];
+const aGeo=new THREE.CylinderGeometry(0.04,0.04,0.75,6); aGeo.rotateX(Math.PI/2);
+const aMat=new THREE.MeshLambertMaterial({color:0xd4a44c});
+
+function shootArrow() {
+  const m=new THREE.Mesh(aGeo,aMat);
+  m.position.copy(camera.position);
+  const dir=new THREE.Vector3(); camera.getWorldDirection(dir);
+  const ar={ mesh:m, vel:dir.clone().multiplyScalar(28), life:5, dmg:4 };
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),dir);
+  scene.add(m); arrows.push(ar);
+}
+
+function updateArrows(dt) {
+  for (let i=arrows.length-1;i>=0;i--) {
+    const a=arrows[i]; a.life-=dt; a.vel.y-=12*dt;
+    const np=a.mesh.position.clone().addScaledVector(a.vel,dt);
+    if (world.has(bkey(np.x,np.y,np.z))||a.life<=0) { scene.remove(a.mesh); arrows.splice(i,1); continue; }
+    let hit=false;
+    for (const mob of mobs) {
+      if (mob.group.position.distanceTo(np)<0.8) { mob.hit(a.dmg); scene.remove(a.mesh); arrows.splice(i,1); hit=true; break; }
+    }
+    if (!hit) {
+      a.mesh.position.copy(np);
+      const vn=a.vel.clone().normalize(); if(vn.length()>0) a.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),vn);
+    }
+  }
+}
+
+// ── PLAYER ────────────────────────────────────────────
+const PH=1.7;
+const pState={ hp:20, maxHp:20, vel:new THREE.Vector3(), onGround:false, yaw:0, pitch:0, dead:false, atkCD:0, bowCD:0 };
+
+let hotbarSlots=[...HOTBAR_DEFAULT];
+let selSlot=0;
+
+function getItem() { const i=hotbarSlots[selSlot]; return i!=null?ITEMS[i]:null; }
+
+function playerCollides(x,y,z) {
+  const r=0.3, ys=[y-PH,y-PH*0.5,y-0.05];
+  for(const cy of ys) for(const dx of[-r,r]) for(const dz of[-r,r])
+    if(world.has(bkey(x+dx,cy,z+dz))) return true;
+  return false;
+}
+function onGround(x,y,z) {
+  const r=0.28;
+  for(const dx of[-r,r]) for(const dz of[-r,r]) if(world.has(bkey(x+dx,y-PH-0.05,z+dz))) return true;
+  return false;
+}
+
+function hitPlayer(dmg) {
+  if(pState.dead) return;
+  pState.hp=Math.max(0,pState.hp-dmg); updateHPBar();
+  document.getElementById('dmg-flash').classList.add('on');
+  setTimeout(()=>document.getElementById('dmg-flash').classList.remove('on'),140);
+  if(pState.hp<=0) playerDie();
+}
+function playerDie() {
+  pState.dead=true; document.getElementById('death-screen').style.display='flex';
+  document.exitPointerLock(); isPlaying=false;
+}
+function respawn() {
+  pState.dead=false; pState.hp=pState.maxHp; pState.vel.set(0,0,0);
+  camera.position.set(16,15,16); updateHPBar();
+  document.getElementById('death-screen').style.display='none';
+  isPlaying=true;
+  if(!isMobile()) canvas.requestPointerLock();
+}
+
+function updateHPBar() {
+  const b=document.getElementById('health-bar'); b.innerHTML='';
+  for(let i=0;i<pState.maxHp/2;i++) {
+    const h=document.createElement('span'); h.className='heart';
+    h.textContent=i<Math.ceil(pState.hp/2)?'❤️':'🖤'; b.appendChild(h);
+  }
+}
+
+let _notifyTimer;
+function notify(msg) {
+  const e=document.getElementById('notify'); e.textContent=msg; e.classList.add('show');
+  clearTimeout(_notifyTimer); _notifyTimer=setTimeout(()=>e.classList.remove('show'),2200);
+}
+
+// ── RAYCASTING ────────────────────────────────────────
+const rc=new THREE.Raycaster(); rc.near=0.5; rc.far=6.5;
+function targetBlock() {
+  const d=new THREE.Vector3(); camera.getWorldDirection(d); rc.set(camera.position,d);
+  const hits=rc.intersectObjects([...meshMap.values()]);
+  return hits.length?hits[0]:null;
+}
+
+// Axe-like tools: which block types they affect fast
+const FAST_BREAK = {
+  axe:   [4,5],   // ahşap, yaprak
+  pick:  [2,6],   // taş, tuğla
+  shovel:[1,3],   // toprak, kum
+};
+
+// ── INTERACT ──────────────────────────────────────────
+function doUse() {
+  const item=getItem();
+  if(!item){ doBreak(1); return; }
+  if (item.type==='sword') {
+    if(pState.atkCD>0) return; pState.atkCD=0.45;
+    let best=null, bestD=3.2;
+    for(const m of mobs){ const d=m.group.position.distanceTo(camera.position); if(d<bestD){bestD=d;best=m;} }
+    if(best){ best.hit(5); notify('⚔ '+best.def.name+'\'e 5 hasar!'); }
+    else notify('💨 Iskaladı!');
+  } else if (item.type==='bow') {
+    if(pState.bowCD>0) return; pState.bowCD=1.1;
+    shootArrow(); notify('🏹 Ok atıldı!');
+  } else if (item.type==='block') {
+    doBreak(1);
+  } else {
+    // Tool — check speed mult
+    const hit=targetBlock(); if(!hit) return;
+    const bi=world.get(bkey(hit.object.position.x,hit.object.position.y,hit.object.position.z));
+    const fast=FAST_BREAK[item.type]||[];
+    const isFast=fast.includes(bi);
+    if(isFast) notify('⚡ Hızlı kırıldı!');
+    removeBlock(hit.object.position.x,hit.object.position.y,hit.object.position.z);
+  }
+}
+
+function doBreak(n=1) {
+  const hit=targetBlock(); if(!hit) return;
+  removeBlock(hit.object.position.x,hit.object.position.y,hit.object.position.z);
+}
+
+function doPlace() {
+  const item=getItem(); if(!item||item.type!=='block') return;
+  const hit=targetBlock(); if(!hit) return;
+  const p=hit.object.position, n=hit.face.normal;
+  const nx=Math.round(p.x+n.x),ny=Math.round(p.y+n.y),nz=Math.round(p.z+n.z);
+  const px=Math.round(camera.position.x),pz=Math.round(camera.position.z);
+  const py=Math.round(camera.position.y-0.5);
+  if(nx===px&&nz===pz&&(ny===py||ny===py-1)) return;
+  addBlock(nx,ny,nz,item.bi);
+}
+
+// ── HOTBAR / INVENTORY UI ─────────────────────────────
+function buildHotbar() {
+  const el=document.getElementById('hotbar'); el.innerHTML='';
+  hotbarSlots.forEach((ii,i)=>{
+    const s=document.createElement('div'); s.className='hslot'+(i===selSlot?' active':''); s.id='hs'+i;
+    if(ii!=null){ const it=ITEMS[ii];
+      s.innerHTML='<div class="hslot-icon">'+it.icon+'</div><div class="hslot-name">'+it.name+'</div>';
+    }
+    s.addEventListener('click',()=>selectSlot(i)); el.appendChild(s);
+  });
+  updateItemLabel();
+}
+
+function selectSlot(i) {
+  document.getElementById('hs'+selSlot)?.classList.remove('active');
+  selSlot=i;
+  document.getElementById('hs'+i)?.classList.add('active');
+  updateItemLabel();
+}
+
+function updateItemLabel() {
+  const it=getItem();
+  document.getElementById('item-label').textContent=it?(it.icon+' '+it.name+(it.desc?' — '+it.desc:'')):'';
+}
+
+let invOpen=false;
+function openInv() {
+  invOpen=true; document.getElementById('inv-overlay').classList.add('open');
+  document.exitPointerLock();
+  const iEl=document.getElementById('inv-items'); iEl.innerHTML='';
+  ITEMS.forEach((it,i)=>{
+    const s=document.createElement('div'); s.className='inv-slot';
+    s.innerHTML=it.icon+'<span class="inv-tip">'+it.name+(it.desc?'<br>'+it.desc:'')+'</span>';
+    s.addEventListener('click',()=>{ hotbarSlots[selSlot]=i; buildHotbar(); closeInv(); });
+    iEl.appendChild(s);
+  });
+  const hEl=document.getElementById('inv-hotbar'); hEl.innerHTML='';
+  hotbarSlots.forEach((ii,i)=>{
+    const s=document.createElement('div'); s.className='inv-slot'+(i===selSlot?' sel':'');
+    if(ii!=null) s.textContent=ITEMS[ii].icon;
+    s.addEventListener('click',()=>{ selectSlot(i); buildHotbar(); closeInv(); });
+    hEl.appendChild(s);
+  });
+}
+function closeInv() {
+  invOpen=false; document.getElementById('inv-overlay').classList.remove('open');
+  if(isPlaying&&!isMobile()) canvas.requestPointerLock();
+}
+
+// ── INPUT ─────────────────────────────────────────────
+const keys={};
+let isPlaying=false, isPaused=false;
+const isMobile=()=>('ontouchstart' in window)||navigator.maxTouchPoints>0;
+
+document.addEventListener('keydown', e=>{
+  keys[e.code]=true;
+  if(!isPlaying) return;
+  if(e.code==='KeyE'){ invOpen?closeInv():openInv(); return; }
+  if(e.code==='Escape'){ if(invOpen){closeInv();return;} togglePause(); return; }
+  for(let i=0;i<9;i++) if(e.code==='Digit'+(i+1)) selectSlot(i);
+});
+document.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+document.addEventListener('mousemove', e=>{
+  if(!isPlaying||isPaused||invOpen||!document.pointerLockElement) return;
+  pState.yaw-=e.movementX*0.002; pState.pitch-=e.movementY*0.002;
+  pState.pitch=Math.max(-Math.PI/2+0.01,Math.min(Math.PI/2-0.01,pState.pitch));
+});
+canvas.addEventListener('mousedown', e=>{
+  if(!isPlaying||isPaused||invOpen) return;
+  if(e.button===0) doUse(); if(e.button===2) doPlace();
+});
+canvas.addEventListener('contextmenu', e=>e.preventDefault());
+window.addEventListener('wheel', e=>{
+  if(!isPlaying||invOpen) return;
+  selectSlot(((selSlot+(e.deltaY>0?1:-1))%9+9)%9);
+});
+
+// Touch camera (right half)
+let tlook=null;
+canvas.addEventListener('touchstart', e=>{ e.preventDefault();
+  for(const t of e.changedTouches) if(t.clientX>innerWidth*0.42) tlook={id:t.identifier,x:t.clientX,y:t.clientY};
+},{passive:false});
+canvas.addEventListener('touchmove', e=>{ e.preventDefault();
+  for(const t of e.changedTouches) if(tlook&&t.identifier===tlook.id){
+    pState.yaw-=(t.clientX-tlook.x)*0.004; pState.pitch-=(t.clientY-tlook.y)*0.004;
+    pState.pitch=Math.max(-Math.PI/2+0.01,Math.min(Math.PI/2-0.01,pState.pitch));
+    tlook.x=t.clientX; tlook.y=t.clientY;
+  }
+},{passive:false});
+canvas.addEventListener('touchend', e=>{ for(const t of e.changedTouches) if(tlook&&t.identifier===tlook.id) tlook=null; });
+
+// D-pad
+function dpadBtn(id, code) {
+  const el=document.getElementById(id);
+  el.addEventListener('touchstart',e=>{e.preventDefault();keys[code]=true;el.classList.add('pressed');},{passive:false});
+  el.addEventListener('touchend',  e=>{e.preventDefault();keys[code]=false;el.classList.remove('pressed');},{passive:false});
+  el.addEventListener('mousedown', ()=>{keys[code]=true;el.classList.add('pressed');});
+  el.addEventListener('mouseup',   ()=>{keys[code]=false;el.classList.remove('pressed');});
+  el.addEventListener('mouseleave',()=>{keys[code]=false;el.classList.remove('pressed');});
+}
+dpadBtn('dp-up','KeyW'); dpadBtn('dp-down','KeyS'); dpadBtn('dp-left','KeyA'); dpadBtn('dp-right','KeyD');
+
+// Right buttons
+function rbtn(id, fn) {
+  const el=document.getElementById(id);
+  el.addEventListener('touchstart',e=>{e.preventDefault();fn(true);el.classList.add('pressed');},{passive:false});
+  el.addEventListener('touchend',  e=>{e.preventDefault();fn(false);el.classList.remove('pressed');},{passive:false});
+  el.addEventListener('mousedown', ()=>{fn(true);el.classList.add('pressed');});
+  el.addEventListener('mouseup',   ()=>{fn(false);el.classList.remove('pressed');});
+  el.addEventListener('mouseleave',()=>{fn(false);el.classList.remove('pressed');});
+}
+rbtn('btn-jump',  s=>{ if(s) keys['Space']=true; else keys['Space']=false; });
+rbtn('btn-attack',s=>{ if(s) doUse(); });
+rbtn('btn-place', s=>{ if(s) doPlace(); });
+rbtn('btn-inv',   s=>{ if(s){ invOpen?closeInv():openInv(); } });
+
+// ── GAME FLOW ─────────────────────────────────────────
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  document.getElementById('overlay').style.display='none';
+  isPlaying=true;
+  camera.position.set(16,15,16);
+  pState.vel.set(0,0,0);
+  buildHotbar(); updateHPBar(); spawnMobs();
+  if(!isMobile()) canvas.requestPointerLock();
+  requestAnimationFrame(loop);
+});
+document.getElementById('resumeBtn').addEventListener('click', togglePause);
+document.getElementById('respawnBtn').addEventListener('click', respawn);
+
+document.addEventListener('pointerlockchange', ()=>{
+  if(!document.pointerLockElement&&isPlaying&&!isPaused&&!invOpen) togglePause();
+});
+
+function togglePause() {
+  isPaused=!isPaused;
+  const pm=document.getElementById('pause-menu');
+  if(isPaused){ pm.style.display='flex'; document.exitPointerLock(); }
+  else{ pm.style.display='none'; if(!isMobile()) canvas.requestPointerLock(); }
+}
+
+// ── LOOP ──────────────────────────────────────────────
+let lastT=0;
+function loop(t) {
+  requestAnimationFrame(loop);
+  if(!isPlaying||isPaused) return;
+  const dt=Math.min((t-lastT)/1000,0.05); lastT=t;
+
+  if(!pState.dead) {
+    // Player move
+    const fwd=new THREE.Vector3(-Math.sin(pState.yaw),0,-Math.cos(pState.yaw));
+    const rgt=new THREE.Vector3(Math.cos(pState.yaw),0,-Math.sin(pState.yaw));
+    let mx=0,mz=0;
+    if(keys['KeyW']||keys['ArrowUp'])   {mx+=fwd.x;mz+=fwd.z;}
+    if(keys['KeyS']||keys['ArrowDown']) {mx-=fwd.x;mz-=fwd.z;}
+    if(keys['KeyA']||keys['ArrowLeft']) {mx-=rgt.x;mz-=rgt.z;}
+    if(keys['KeyD']||keys['ArrowRight']){mx+=rgt.x;mz+=rgt.z;}
+    const ln=Math.sqrt(mx*mx+mz*mz); if(ln>0){mx/=ln;mz/=ln;}
+    pState.vel.x=mx*6; pState.vel.z=mz*6;
+    pState.vel.y-=25*dt;
+    if(keys['Space']&&pState.onGround) pState.vel.y=9.2;
+
+    const cx=camera.position.x,cy=camera.position.y,cz=camera.position.z;
+    const nx=cx+pState.vel.x*dt; if(!playerCollides(nx,cy,cz)) camera.position.x=nx; else pState.vel.x=0;
+    const nz=cz+pState.vel.z*dt; if(!playerCollides(camera.position.x,cy,nz)) camera.position.z=nz; else pState.vel.z=0;
+    const ny=cy+pState.vel.y*dt;
+    if(!playerCollides(camera.position.x,ny,camera.position.z)){ camera.position.y=ny; pState.onGround=false; }
+    else{ if(pState.vel.y<0)pState.onGround=true; pState.vel.y=0; }
+    if(onGround(camera.position.x,camera.position.y,camera.position.z)) pState.onGround=true;
+    if(camera.position.y<-20){ camera.position.set(16,15,16); pState.vel.set(0,0,0); hitPlayer(3); }
+
+    camera.rotation.order='YXZ'; camera.rotation.y=pState.yaw; camera.rotation.x=pState.pitch;
+    pState.atkCD=Math.max(0,pState.atkCD-dt); pState.bowCD=Math.max(0,pState.bowCD-dt);
+  }
+
+  for(const m of [...mobs]) m.update(dt);
+  updateArrows(dt);
+  renderer.render(scene,camera);
+}
+
+window.addEventListener('resize', ()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
